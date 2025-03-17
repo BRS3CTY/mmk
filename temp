@@ -1,73 +1,89 @@
-$(document).ready(function() {
-    $('input[type="file"]').change(function(e) {
-        var fileName = e.target.files[0].name;
-        $('#' + e.target.id + '-name').text(fileName);
-    });
+function sortJson(jsonData) {
+    if (!Array.isArray(jsonData)) return jsonData;
 
-    $('#upload-form').on('submit', function(e) {
-        e.preventDefault();
-        var startTime = Date.now();
-
-        // Pobranie i posortowanie JSON-ów z plików lub pól tekstowych
-        const processInput = async (fileInput, textInput) => {
-            let jsonData;
-            if (fileInput.files && fileInput.files[0]) {
-                const text = await fileInput.files[0].text();
-                jsonData = JSON.parse(text);
-            } else if (textInput.value.trim()) {
-                jsonData = JSON.parse(textInput.value);
-            }
-            return jsonData ? sortJson(jsonData) : null;
-        };
-
-        Promise.all([
-            processInput(document.getElementById('file1'), document.getElementById('text1')),
-            processInput(document.getElementById('file2'), document.getElementById('text2'))
-        ]).then(([json1, json2]) => {
-            if (json1 && json2) {
-                const json1Str = JSON.stringify(json1, null, 2);
-                const json2Str = JSON.stringify(json2, null, 2);
-
-                // Użycie biblioteki jsdiff do wygenerowania patcha
-                const diff = Diff.createTwoFilesPatch('Plik1', 'Plik2', json1Str, json2Str, '', '');
-
-                if (diff.trim() === '') {
-                    $('#diff').html('<p class="message">Brak różnic.</p>');
-                    $('#download-diff').hide();
-                } else {
-                    try {
-                        // Konwersja wyniku diff na HTML przy użyciu Diff2Html
-                        const diffHtml = Diff2Html.html(diff, {
-                            inputFormat: 'diff',
-                            outputFormat: 'side-by-side',
-                            drawFileList: true,
-                            matching: 'lines',
-                            highlight: true
-                        });
-                        $('#diff').html(diffHtml);
-                        $('#download-diff').show();
-                    } catch (e) {
-                        $('#diff').html(`<pre>${diff}</pre>`);
-                        $('#download-diff').show();
-                    }
+    jsonData.forEach(item => {
+        // Sortowanie tablicy items
+        if (item.items && Array.isArray(item.items)) {
+            // Usuwamy niepotrzebne pola w elementach items
+            item.items = item.items.map(cleanupItemFields);
+            item.items.sort((a, b) => a.name.localeCompare(b.name));
+        }
+        // Sortowanie tablicy dependencies
+        if (item.dependencies && Array.isArray(item.dependencies)) {
+            item.dependencies = item.dependencies.map(cleanupDependencyFields);
+            item.dependencies.sort((a, b) => {
+                let cmp = a.dependencyType.localeCompare(b.dependencyType);
+                if (cmp === 0) {
+                    cmp = a.name.localeCompare(b.name);
                 }
-            }
-        }).catch(error => {
-            $('#diff').html(`<p class="error">Błąd podczas przetwarzania JSON: ${error.message}</p>`);
-        });
-    });
-
-    $('#download-diff').click(function() {
-        if (typeof diff !== 'undefined' && diff) {
-            const blob = new Blob([diff], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'diff.txt';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+                return cmp;
+            });
+        }
+        // Sortowanie tablicy tags
+        if (item.tags && Array.isArray(item.tags)) {
+            item.tags.sort();
+        }
+        // Usuwanie pola passActionsToChildren, jeśli jest fałszywe
+        if ('passActionsToChildren' in item && !item.passActionsToChildren) {
+            delete item.passActionsToChildren;
+        }
+        // Usuwanie pola highRisk, jeśli istnieje
+        if ('highRisk' in item) {
+            delete item.highRisk;
         }
     });
+
+    // Sortowanie głównej tablicy wg domainClass i id
+    jsonData.sort((a, b) => {
+        let cmp = a.domainClass.localeCompare(b.domainClass);
+        if (cmp === 0) {
+            cmp = a.id.localeCompare(b.id);
+        }
+        return cmp;
+    });
+
+    return jsonData;
+}
+
+
+
+Promise.all([
+    processInput(document.getElementById('file1'), document.getElementById('text1')),
+    processInput(document.getElementById('file2'), document.getElementById('text2'))
+]).then(([json1, json2]) => {
+    if (json1 && json2) {
+        // Pobranie nazw plików lub ustawienie wartości domyślnych
+        const file1Input = document.getElementById('file1');
+        const file2Input = document.getElementById('file2');
+        const file1Name = (file1Input.files && file1Input.files[0]) ? file1Input.files[0].name : 'JSON1';
+        const file2Name = (file2Input.files && file2Input.files[0]) ? file2Input.files[0].name : 'JSON2';
+
+        const json1Str = JSON.stringify(json1, null, 2);
+        const json2Str = JSON.stringify(json2, null, 2);
+
+        // Użycie bibliotek do generowania patcha, przekazując dynamiczne nazwy plików
+        const diff = Diff.createTwoFilesPatch(file1Name, file2Name, json1Str, json2Str, '', '');
+
+        if (diff.trim() === '') {
+            $('#diff').html('<p class="message">Brak różnic.</p>');
+            $('#download-diff').hide();
+        } else {
+            try {
+                const diffHtml = Diff2Html.html(diff, {
+                    inputFormat: 'diff',
+                    outputFormat: 'side-by-side',
+                    drawFileList: true,
+                    matching: 'lines',
+                    highlight: true
+                });
+                $('#diff').html(diffHtml);
+                $('#download-diff').show();
+            } catch (e) {
+                $('#diff').html(`<pre>${diff}</pre>`);
+                $('#download-diff').show();
+            }
+        }
+    }
+}).catch(error => {
+    $('#diff').html(`<p class="error">Błąd podczas przetwarzania JSON: ${error.message}</p>`);
 });
