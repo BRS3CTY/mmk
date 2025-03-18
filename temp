@@ -16,36 +16,37 @@ function sortObject(elem) {
 function sortJson(jsonData) {
     if (!Array.isArray(jsonData)) return jsonData;
 
-    // Przetwarzamy każdą grupę, czyszcząc zbędne pola
-    jsonData = jsonData.map(item => cleanupGroupFields(item));
+    // Przetwarzamy główne grupy:
+    jsonData = jsonData.map(group => sortObject(cleanupGroupFields(group)));
 
-    jsonData.forEach(item => {
-        // Sortowanie tablicy items
-        if (item.items && Array.isArray(item.items)) {
-            // Czyszczenie i sortowanie kluczy każdego elementu
-            item.items = item.items.map(el => sortObject(cleanupItemFields(el)));
-            item.items.sort((a, b) => a.name.localeCompare(b.name));
+    jsonData.forEach(group => {
+        // Sortowanie tablicy items – czyszczenie pól i sortowanie kluczy
+        if (group.items && Array.isArray(group.items)) {
+            group.items = group.items
+                .map(item => sortObject(cleanupItemFields(item)))
+                .sort((a, b) => a.name.localeCompare(b.name));
         }
-        // Sortowanie tablicy dependencies
-        if (item.dependencies && Array.isArray(item.dependencies)) {
-            item.dependencies = item.dependencies.map(cleanupDependencyFields);
-            item.dependencies.sort((a, b) => {
-                const keyA = (a.dependencyType || '') + '!@#$' + (a.name || '') + '!@#$' + (a.workflowItem || '');
-                const keyB = (b.dependencyType || '') + '!@#$' + (b.name || '') + '!@#$' + (b.workflowItem || '');
-                return keyA.localeCompare(keyB);
-            });
+        // Sortowanie tablicy dependencies – czyszczenie pól, sortowanie kluczy i sortowanie wg dependencyType, name, workflowItem
+        if (group.dependencies && Array.isArray(group.dependencies)) {
+            group.dependencies = group.dependencies
+                .map(dep => sortObject(cleanupDependencyFields(dep)))
+                .sort((a, b) => {
+                    const keyA = (a.dependencyType || '') + '!@#$' + (a.name || '') + '!@#$' + (a.workflowItem || '');
+                    const keyB = (b.dependencyType || '') + '!@#$' + (b.name || '') + '!@#$' + (b.workflowItem || '');
+                    return keyA.localeCompare(keyB);
+                });
         }
-        // Sortowanie tablicy tags
-        if (item.tags && Array.isArray(item.tags)) {
-            item.tags.sort();
+        // Sortowanie tablicy tags (jeśli dotyczy)
+        if (group.tags && Array.isArray(group.tags)) {
+            group.tags.sort();
         }
     });
 
     // Sortowanie głównej tablicy wg domainClass i id
     jsonData.sort((a, b) => {
-        let cmp = a.domainClass.localeCompare(b.domainClass);
+        let cmp = (a.domainClass || '').localeCompare(b.domainClass || '');
         if (cmp === 0) {
-            cmp = a.id.localeCompare(b.id);
+            cmp = (a.id || '').localeCompare(b.id || '');
         }
         return cmp;
     });
