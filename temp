@@ -1,55 +1,201 @@
-// Funkcja rekurencyjnie sortująca klucze obiektu
-function sortObject(elem) {
-    if (typeof elem !== 'object' || elem === null) {
-        return elem;
-    }
-    if (Array.isArray(elem)) {
-        return elem.map(item => sortObject(item));
-    }
-    const sorted = {};
-    Object.keys(elem).sort().forEach(key => {
-        sorted[key] = sortObject(elem[key]);
-    });
-    return sorted;
-}
+#!/usr/bin/env python3
+import json
+import argparse
+import sys
+from typing import Dict, List, Any, Union
 
-function sortJson(jsonData) {
-    if (!Array.isArray(jsonData)) return jsonData;
 
-    // Przetwarzamy główne grupy:
-    jsonData = jsonData.map(group => sortObject(cleanupGroupFields(group)));
+def sort_object(elem: Any) -> Any:
+    """
+    Recursively sort an object's properties in alphabetical order.
+    
+    Args:
+        elem: The element to sort
+        
+    Returns:
+        The sorted element
+    """
+    if not isinstance(elem, dict):
+        if isinstance(elem, list):
+            return [sort_object(item) for item in elem]
+        return elem
+    
+    sorted_entries = sorted(elem.items(), key=lambda x: x[0])
+    return {key: sort_object(value) for key, value in sorted_entries}
 
-    jsonData.forEach(group => {
-        // Sortowanie tablicy items – czyszczenie pól i sortowanie kluczy
-        if (group.items && Array.isArray(group.items)) {
-            group.items = group.items
-                .map(item => sortObject(cleanupItemFields(item)))
-                .sort((a, b) => a.name.localeCompare(b.name));
-        }
-        // Sortowanie tablicy dependencies – czyszczenie pól, sortowanie kluczy i sortowanie wg dependencyType, name, workflowItem
-        if (group.dependencies && Array.isArray(group.dependencies)) {
-            group.dependencies = group.dependencies
-                .map(dep => sortObject(cleanupDependencyFields(dep)))
-                .sort((a, b) => {
-                    const keyA = (a.dependencyType || '') + '!@#$' + (a.name || '') + '!@#$' + (a.workflowItem || '');
-                    const keyB = (b.dependencyType || '') + '!@#$' + (b.name || '') + '!@#$' + (b.workflowItem || '');
-                    return keyA.localeCompare(keyB);
-                });
-        }
-        // Sortowanie tablicy tags (jeśli dotyczy)
-        if (group.tags && Array.isArray(group.tags)) {
-            group.tags.sort();
-        }
-    });
 
-    // Sortowanie głównej tablicy wg domainClass i id
-    jsonData.sort((a, b) => {
-        let cmp = (a.domainClass || '').localeCompare(b.domainClass || '');
-        if (cmp === 0) {
-            cmp = (a.id || '').localeCompare(b.id || '');
-        }
-        return cmp;
-    });
+def cleanup_item_fields(item: Dict) -> Dict:
+    """
+    Remove specific fields from item objects.
+    
+    Args:
+        item: The item object to clean
+        
+    Returns:
+        The cleaned item object
+    """
+    fields_to_remove = [
+        'title', 'sortOrder', 'highRisk', 'highRiskStatisticMethod',
+        'highRiskStatisticPeriod', 'highRiskThreshold', 'statisticMethod',
+        'statisticPeriod', 'comment', 'reason', 'ignoreProcessingStateRegistry', 
+        'verboseMode', 'disableManualExecution', 'groupId', 'forceLoad', 
+        'eagerScriptExecution', 'useScripts'
+    ]
+    
+    for field in fields_to_remove:
+        if field in item:
+            del item[field]
+    
+    if 'description' in item and item['description'] is None:
+        del item['description']
+    
+    return item
 
-    return jsonData;
-}
+
+def cleanup_dependency_fields(dependency: Dict) -> Dict:
+    """
+    Remove specific fields from dependency objects.
+    
+    Args:
+        dependency: The dependency object to clean
+        
+    Returns:
+        The cleaned dependency object
+    """
+    fields_to_remove = [
+        'groupId', 'sortKey', 'layoutPreset', 'layoutSettings', 'highRisk', 
+        'highRiskStatisticMethod', 'highRiskStatisticPeriod', 'highRiskThreshold', 
+        'statisticMethod', 'statisticPeriod', 'comment', 'reason', 
+        'ignoreProcessingStateRegistry', 'verboseMode', 'disableManualExecution', 
+        'groupId', 'forceLoad', 'eagerScriptExecution', 'useScripts'
+    ]
+    
+    for field in fields_to_remove:
+        if field in dependency:
+            del dependency[field]
+    
+    if 'description' in dependency and dependency['description'] is None:
+        del dependency['description']
+    
+    return dependency
+
+
+def cleanup_group_fields(group: Dict) -> Dict:
+    """
+    Remove specific fields from group objects.
+    
+    Args:
+        group: The group object to clean
+        
+    Returns:
+        The cleaned group object
+    """
+    fields_to_remove = [
+        'layoutPreset', 'layoutSettings', 'highRisk', 'highRiskStatisticMethod',
+        'highRiskStatisticPeriod', 'highRiskThreshold', 'statisticMethod',
+        'statisticPeriod', 'comment', 'reason', 'ignoreProcessingStateRegistry', 
+        'verboseMode', 'disableManualExecution', 'groupId', 'forceLoad', 
+        'eagerScriptExecution', 'useScripts'
+    ]
+    
+    for field in fields_to_remove:
+        if field in group:
+            del group[field]
+    
+    if 'description' in group and group['description'] is None:
+        del group['description']
+    
+    if 'passActionsToChildren' in group and not group['passActionsToChildren']:
+        del group['passActionsToChildren']
+    
+    return group
+
+
+def sort_json(json_data: List[Dict]) -> List[Dict]:
+    """
+    Sort JSON data according to specific rules.
+    
+    Args:
+        json_data: The JSON data to sort
+        
+    Returns:
+        The sorted JSON data
+    """
+    if not isinstance(json_data, list):
+        return json_data
+    
+    # Process main groups
+    json_data = [sort_object(cleanup_group_fields(group)) for group in json_data]
+    
+    for group in json_data:
+        # Sort items array - clean fields and sort by keys
+        if 'items' in group and isinstance(group['items'], list):
+            group['items'] = sorted(
+                [sort_object(cleanup_item_fields(item)) for item in group['items']],
+                key=lambda x: x.get('name', '')
+            )
+        
+        # Sort dependencies array - clean fields, sort by keys and sort by dependencyType, name, workflowItem
+        if 'dependencies' in group and isinstance(group['dependencies'], list):
+            group['dependencies'] = sorted(
+                [sort_object(cleanup_dependency_fields(dep)) for dep in group['dependencies']],
+                key=lambda x: (
+                    x.get('dependencyType', ''),
+                    x.get('name', ''),
+                    x.get('workflowItem', '')
+                )
+            )
+        
+        # Sort tags array (if applicable)
+        if 'tags' in group and isinstance(group['tags'], list):
+            group['tags'].sort()
+    
+    # Sort main array by domainClass and id
+    json_data.sort(key=lambda x: (x.get('domainClass', ''), x.get('id', '')))
+    
+    return json_data
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Sort and clean the second JSON file based on the first one')
+    parser.add_argument('file1', help='First JSON file (reference, not modified)')
+    parser.add_argument('file2', help='Second JSON file (to be sorted and cleaned)')
+    parser.add_argument('-o', '--output', help='Output file for sorted second JSON')
+    
+    args = parser.parse_args()
+    
+    try:
+        # Read and parse both JSON files, but we only need the second one for modification
+        # First file is read just for reference (not used in this version)
+        with open(args.file1, 'r', encoding='utf-8') as f1:
+            json1 = json.load(f1)
+        
+        # Read and parse second JSON file
+        with open(args.file2, 'r', encoding='utf-8') as f2:
+            json2 = json.load(f2)
+        
+        # Only sort and clean the second JSON file
+        sorted_json2 = sort_json(json2)
+        
+        # Determine output file
+        output_file = args.output if args.output else f"{args.file2.rsplit('.', 1)[0]}_sorted.json"
+        
+        # Write sorted second JSON to output file
+        with open(output_file, 'w', encoding='utf-8') as f_out:
+            json.dump(sorted_json2, f_out, indent=2, ensure_ascii=False)
+        
+        print(f"Sorted JSON has been written to {output_file}")
+        
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+    except FileNotFoundError as e:
+        print(f"File not found: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"An error occurred: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
